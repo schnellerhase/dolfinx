@@ -44,6 +44,8 @@ int main(int argc, char** argv)
 
     auto mesh = std::make_shared<mesh::Mesh<U>>(
         dolfinx::mesh::create_interval<U>(MPI_COMM_SELF, n_fine, {0.0, 1.0}));
+    auto mesh_coarse = std::make_shared<mesh::Mesh<U>>(
+        dolfinx::mesh::create_interval<U>(MPI_COMM_SELF, n_coarse, {0.0, 1.0}));
 
     auto element = basix::create_element<U>(
         basix::element::family::P, basix::cell::type::interval, 1,
@@ -52,17 +54,21 @@ int main(int argc, char** argv)
 
     auto V = std::make_shared<fem::FunctionSpace<U>>(
         fem::create_functionspace<U>(mesh, element, {}));
+    auto V_coarse = std::make_shared<fem::FunctionSpace<U>>(
+        fem::create_functionspace<U>(mesh_coarse, element, {}));
 
     // Prepare and set Constants for the bilinear form
-    auto f = std::make_shared<fem::Function<T>>(V);
-    f->interpolate(
-        [](auto x) -> std::pair<std::vector<T>, std::vector<std::size_t>>
+    auto f_ana = [](auto x) -> std::pair<std::vector<T>, std::vector<std::size_t>>
         {
           std::vector<T> f;
           for (std::size_t p = 0; p < x.extent(1); ++p)
             f.push_back(-2 * std::numbers::pi * std::numbers::pi);
           return {f, {f.size()}};
-        });
+        };
+    auto f = std::make_shared<fem::Function<T>>(V);
+    f->interpolate(f_ana);
+    auto f_coarse = std::make_shared<fem::Function<T>>(V_coarse);
+    f_coarse->interpolate(f_ana);
 
     {
         io::VTKFile file(MPI_COMM_SELF, "f.pvd", "w");
@@ -72,6 +78,9 @@ int main(int argc, char** argv)
     // Define variational forms
     auto a = std::make_shared<fem::Form<T>>(
         fem::create_form<T>(*form_poisson_a, {V, V}, {}, {}, {}));
+    auto a_coarse = std::make_shared<fem::Form<T>>(
+        fem::create_form<T>(*form_poisson_a, {V_coarse, V_coarse}, {}, {}, {}));
+
     auto L = std::make_shared<fem::Form<T>>(
         fem::create_form<T>(*form_poisson_L, {V}, {{"f", f}}, {}, {}));
     
@@ -83,6 +92,10 @@ int main(int argc, char** argv)
     auto&& facets = mesh::locate_entities_boundary(*mesh, 0, [](auto x) { return std::vector<std::int8_t>(x.extent(1), true); });
     const auto bdofs = fem::locate_dofs_topological(*V->mesh()->topology_mutable(), *V->dofmap(), 0, facets);
     auto bc = std::make_shared<const fem::DirichletBC<T>>(0.0, bdofs, V);
+
+    auto&& facets_coarse = mesh::locate_entities_boundary(*mesh_coarse, 0, [](auto x) { return std::vector<std::int8_t>(x.extent(1), true); });
+    const auto bdofs_coarse = fem::locate_dofs_topological(*V_coarse->mesh()->topology_mutable(), *V_coarse->dofmap(), 0, facets_coarse);
+    auto bc_coarse = std::make_shared<const fem::DirichletBC<T>>(0.0, bdofs_coarse, V_coarse);
 
     MatZeroEntries(A.mat());
     fem::assemble_matrix(la::petsc::Matrix::set_block_fn(A.mat(), ADD_VALUES), *a, {bc});
@@ -110,7 +123,21 @@ int main(int argc, char** argv)
     PCMGSetLevels(pc, 2, NULL);
     PCMGSetType(pc, PC_MG_MULTIPLICATIVE);
     PCMGSetCycleType(pc, PC_MG_CYCLE_V);
-    PCMGSetGalerkin(pc, PC_MG_GALERKIN_BOTH);
+    // PCMGSetGalerkin(pc, PC_MG_GALERKIN_BOTH);
+    PCMGSetGalerkin(pc, PC_MG_GALERKIN_NONE);
+
+    auto A_coarse = la::petsc::Matrix(fem::petsc::create_matrix(*a_coarse), false);
+    {
+        MatZeroEntries(A_coarse.mat());
+        fem::assemble_matrix(la::petsc::Matrix::set_block_fn(A_coarse.mat(), ADD_VALUES), *a_coarse, {bc_coarse});
+        MatAssemblyBegin(A_coarse.mat(), MAT_FLUSH_ASSEMBLY);
+        MatAssemblyEnd(A_coarse.mat(), MAT_FLUSH_ASSEMBLY);
+        fem::set_diagonal<T>(la::petsc::Matrix::set_fn(A_coarse.mat(), INSERT_VALUES), *V_coarse, {bc_coarse});
+        MatAssemblyBegin(A_coarse.mat(), MAT_FINAL_ASSEMBLY);
+        MatAssemblyEnd(A_coarse.mat(), MAT_FINAL_ASSEMBLY);
+    }
+    PCMGSetOperators(pc, 0, A_coarse.mat(), A_coarse.mat());
+
     PCMGSetNumberSmooth(pc, 2);
     PCSetFromOptions(pc);
 
