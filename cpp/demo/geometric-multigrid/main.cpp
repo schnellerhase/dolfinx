@@ -201,15 +201,15 @@ int main(int argc, char** argv)
     // MatView(interpolation, PETSC_VIEWER_STDOUT_SELF);
   }
 
-  Mat restriction;
-  MatTranspose(interpolation, MAT_INITIAL_MATRIX, &restriction);
+//   Mat restriction;
+//   MatTranspose(interpolation, MAT_INITIAL_MATRIX, &restriction);
   // MatView(restriction, PETSC_VIEWER_STDOUT_SELF);
 
   PCMGSetInterpolation(pc, 1, interpolation);
   // MatDestroy(&interpolation);
 
-  PCMGSetRestriction(pc, 1, restriction);
-  // MatDestroy(&restriction);
+  // PETSc figures out to use transpose by dimensions!
+  PCMGSetRestriction(pc, 1, interpolation);
 
   // MatView(A.mat(), PETSC_VIEWER_STDOUT_SELF);
   KSPSetOperators(ksp, A.mat(), A.mat());
