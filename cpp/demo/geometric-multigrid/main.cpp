@@ -15,11 +15,10 @@
 #include <petscvec.h>
 #include <petscviewer.h>
 #include <sys/types.h>
-#include <utility>
-#include <vector>
 
 #include <basix/finite-element.h>
 
+#include <dolfinx/common/MPI.h>
 #include <dolfinx/fem/DirichletBC.h>
 #include <dolfinx/fem/FunctionSpace.h>
 #include <dolfinx/fem/petsc.h>
@@ -54,8 +53,9 @@ int main(int argc, char** argv)
 
   auto create_FEM_space = [](int n)
   {
+    auto part = mesh::create_cell_partitioner(mesh::GhostMode::shared_vertex);
     auto mesh = std::make_shared<mesh::Mesh<U>>(
-        dolfinx::mesh::create_interval<U>(MPI_COMM_SELF, n, {0.0, 1.0}));
+        dolfinx::mesh::create_interval<U>(MPI_COMM_WORLD, n, {0.0, 1.0}, part));
     auto element = basix::create_element<U>(
         basix::element::family::P, basix::cell::type::interval, 1,
         basix::element::lagrange_variant::unset,
@@ -66,8 +66,8 @@ int main(int argc, char** argv)
                                                        std::move(V));
   };
 
-  const auto [mesh, V] = create_FEM_space(n_fine);
-  const auto [mesh_coarse, V_coarse] = create_FEM_space(n_coarse);
+  auto [mesh, V] = create_FEM_space(n_fine);
+  auto [mesh_coarse, V_coarse] = create_FEM_space(n_coarse);
 
   auto interpolate_f = [](auto V)
   {
@@ -88,7 +88,7 @@ int main(int argc, char** argv)
   const auto f_coarse = interpolate_f(V_coarse);
 
   {
-    io::VTKFile file(MPI_COMM_SELF, "f.pvd", "w");
+    io::VTKFile file(MPI_COMM_WORLD, "f.pvd", "w");
     file.write<T>({*f}, 0.0);
   }
 
@@ -175,8 +175,10 @@ int main(int argc, char** argv)
   Mat interpolation;
   {
     auto local_rows = V->dofmap()->index_map->size_local();
+    auto local_cols = V_coarse->dofmap()->index_map->size_local();
+    auto global_rows = V->dofmap()->index_map->size_global();
     auto global_cols = V_coarse->dofmap()->index_map->size_global();
-    MatCreateAIJ(MPI_COMM_SELF, local_rows, PETSC_DETERMINE, PETSC_DETERMINE,
+    MatCreateAIJ(MPI_COMM_WORLD, local_rows, local_cols, global_rows,
                  global_cols, 2, NULL, 1, NULL, &interpolation);
 
     // this shoud be quite overkill for the parallel case -> localize the value
@@ -214,7 +216,7 @@ int main(int argc, char** argv)
   u->x()->scatter_fwd();
 
   {
-    io::VTKFile file(MPI_COMM_SELF, "u.pvd", "w");
+    io::VTKFile file(MPI_COMM_WORLD, "u.pvd", "w");
     file.write<T>({*u}, 0.0);
   }
 
