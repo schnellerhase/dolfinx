@@ -174,36 +174,27 @@ int main(int argc, char** argv)
 
   Mat interpolation;
   {
-    int64_t nz = 2 * n_fine + (n_fine + 1);
-    std::vector<PetscInt> i; // row indices
-    i.reserve(nz);
-    std::vector<PetscInt> j; // col indices
-    j.reserve(nz);
-    std::vector<PetscScalar> a;
-    a.reserve(nz);
+    auto local_rows = V->dofmap()->index_map->size_local();
+    auto global_cols = V_coarse->dofmap()->index_map->size_global();
+    MatCreateAIJ(MPI_COMM_SELF, local_rows, PETSC_DETERMINE, PETSC_DETERMINE,
+                 global_cols, 2, NULL, 1, NULL, &interpolation);
+
+    // this shoud be quite overkill for the parallel case -> localize the value
+    // setting and do not repeat!!!
     for (int64_t idx = 0; idx < n_fine + 1; idx++)
     {
       if (idx % 2 == 0)
       {
-        i.emplace_back(idx);
-        j.emplace_back(PetscInt(idx / 2.));
-        a.emplace_back(1);
+        MatSetValue(interpolation, idx, PetscInt(idx / 2), 1., INSERT_VALUES);
       }
       else
       {
-        i.emplace_back(idx);
-        j.emplace_back(floor(idx / 2.));
-        a.emplace_back(.5);
-
-        i.emplace_back(idx);
-        j.emplace_back(ceil(idx / 2.));
-        a.emplace_back(.5);
+        MatSetValue(interpolation, idx, floor(idx / 2.0), .5, INSERT_VALUES);
+        MatSetValue(interpolation, idx, ceil(idx / 2.0), .5, INSERT_VALUES);
       }
     }
-    MatCreateSeqAIJFromTriple(MPI_COMM_SELF, n_fine + 1, n_coarse + 1, i.data(),
-                              j.data(), a.data(), &interpolation, a.size(),
-                              PETSC_FALSE);
-    // MatView(interpolation, PETSC_VIEWER_STDOUT_SELF);
+    MatAssemblyBegin(interpolation, MAT_FINAL_ASSEMBLY);
+    MatAssemblyEnd(interpolation, MAT_FINAL_ASSEMBLY);
   }
 
   // PETSc figures out to use transpose by dimensions!
