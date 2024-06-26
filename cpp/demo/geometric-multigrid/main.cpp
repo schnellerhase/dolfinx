@@ -15,6 +15,7 @@
 #include <petscvec.h>
 #include <petscviewer.h>
 #include <sys/types.h>
+#include <utility>
 #include <vector>
 
 #include <basix/finite-element.h>
@@ -35,81 +36,101 @@ using T = PetscScalar;
 using U = typename dolfinx::scalar_value_type_t<T>;
 
 int main(int argc, char** argv)
-{
+{    
+    PetscInitialize(&argc, &argv, nullptr, nullptr);
+ 
     int n_coarse = 8;
     int n_fine = 16;
-    
-    PetscInitialize(&argc, &argv, nullptr, nullptr);
-    // PetscLogDefaultBegin();
 
-    auto mesh = std::make_shared<mesh::Mesh<U>>(
-        dolfinx::mesh::create_interval<U>(MPI_COMM_SELF, n_fine, {0.0, 1.0}));
-    auto mesh_coarse = std::make_shared<mesh::Mesh<U>>(
-        dolfinx::mesh::create_interval<U>(MPI_COMM_SELF, n_coarse, {0.0, 1.0}));
+    auto create_FEM_space = [](int n)
+    {
+      auto mesh = std::make_shared<mesh::Mesh<U>>(
+          dolfinx::mesh::create_interval<U>(MPI_COMM_SELF, n, {0.0, 1.0}));
+      auto element = basix::create_element<U>(
+          basix::element::family::P, basix::cell::type::interval, 1,
+          basix::element::lagrange_variant::unset,
+          basix::element::dpc_variant::unset, false);
+      auto V = std::make_shared<fem::FunctionSpace<U>>(
+          fem::create_functionspace<U>(mesh, element, {}));
+      return std::make_pair<decltype(mesh), decltype(V)>(std::move(mesh),
+                                                         std::move(V));
+    };
 
-    auto element = basix::create_element<U>(
-        basix::element::family::P, basix::cell::type::interval, 1,
-        basix::element::lagrange_variant::unset,
-        basix::element::dpc_variant::unset, false);
+    const auto [mesh, V] = create_FEM_space(n_fine);
+    const auto [mesh_coarse, V_coarse] = create_FEM_space(n_coarse);
 
-    auto V = std::make_shared<fem::FunctionSpace<U>>(
-        fem::create_functionspace<U>(mesh, element, {}));
-    auto V_coarse = std::make_shared<fem::FunctionSpace<U>>(
-        fem::create_functionspace<U>(mesh_coarse, element, {}));
+    auto interpolate_f = [](auto V)
+    {
+      auto f_ana
+          = [](auto x) -> std::pair<std::vector<T>, std::vector<std::size_t>>
+      {
+        std::vector<T> f;
+        for (std::size_t p = 0; p < x.extent(1); ++p)
+          f.push_back(-2 * std::numbers::pi * std::numbers::pi);
+        return {f, {f.size()}};
+      };
+      auto f = std::make_shared<fem::Function<T>>(V);
+      f->interpolate(f_ana);
+      return f;
+    };
 
-    // Prepare and set Constants for the bilinear form
-    auto f_ana = [](auto x) -> std::pair<std::vector<T>, std::vector<std::size_t>>
-        {
-          std::vector<T> f;
-          for (std::size_t p = 0; p < x.extent(1); ++p)
-            f.push_back(-2 * std::numbers::pi * std::numbers::pi);
-          return {f, {f.size()}};
-        };
-    auto f = std::make_shared<fem::Function<T>>(V);
-    f->interpolate(f_ana);
-    auto f_coarse = std::make_shared<fem::Function<T>>(V_coarse);
-    f_coarse->interpolate(f_ana);
+    const auto f = interpolate_f(V);
+    const auto f_coarse = interpolate_f(V_coarse);
 
     {
         io::VTKFile file(MPI_COMM_SELF, "f.pvd", "w");
         file.write<T>({*f}, 0.0);
     }
 
-    // Define variational forms
-    auto a = std::make_shared<fem::Form<T>>(
-        fem::create_form<T>(*form_poisson_a, {V, V}, {}, {}, {}));
-    auto a_coarse = std::make_shared<fem::Form<T>>(
-        fem::create_form<T>(*form_poisson_a, {V_coarse, V_coarse}, {}, {}, {}));
+    auto create_variational_problem = [](auto V, auto f)
+    {
+      auto a = std::make_shared<fem::Form<T>>(
+          fem::create_form<T>(*form_poisson_a, {V, V}, {}, {}, {}));
+      auto L = std::make_shared<fem::Form<T>>(
+          fem::create_form<T>(*form_poisson_L, {V}, {{"f", f}}, {}, {}));
+      auto A = la::petsc::Matrix(fem::petsc::create_matrix(*a), false);
+      la::Vector<T> b(L->function_spaces()[0]->dofmap()->index_map,
+                      L->function_spaces()[0]->dofmap()->index_map_bs());
 
-    auto L = std::make_shared<fem::Form<T>>(
-        fem::create_form<T>(*form_poisson_L, {V}, {{"f", f}}, {}, {}));
-    
-    auto A = la::petsc::Matrix(fem::petsc::create_matrix(*a), false);
-    la::Vector<T> b(L->function_spaces()[0]->dofmap()->index_map,
-                    L->function_spaces()[0]->dofmap()->index_map_bs());
-    
+      auto&& facets = mesh::locate_entities_boundary(
+          *V->mesh(), 0,
+          [](auto x) { return std::vector<std::int8_t>(x.extent(1), true); });
+      const auto bdofs = fem::locate_dofs_topological(
+          *V->mesh()->topology_mutable(), *V->dofmap(), 0, facets);
+      auto bc = std::make_shared<const fem::DirichletBC<T>>(0.0, bdofs, V);
 
-    auto&& facets = mesh::locate_entities_boundary(*mesh, 0, [](auto x) { return std::vector<std::int8_t>(x.extent(1), true); });
-    const auto bdofs = fem::locate_dofs_topological(*V->mesh()->topology_mutable(), *V->dofmap(), 0, facets);
-    auto bc = std::make_shared<const fem::DirichletBC<T>>(0.0, bdofs, V);
+      return std::make_tuple<decltype(a), decltype(L), decltype(bc), decltype(A), decltype(b)>(std::move(a), std::move(L), std::move(bc), std::move(A), std::move(b));
+    };  
 
-    auto&& facets_coarse = mesh::locate_entities_boundary(*mesh_coarse, 0, [](auto x) { return std::vector<std::int8_t>(x.extent(1), true); });
-    const auto bdofs_coarse = fem::locate_dofs_topological(*V_coarse->mesh()->topology_mutable(), *V_coarse->dofmap(), 0, facets_coarse);
-    auto bc_coarse = std::make_shared<const fem::DirichletBC<T>>(0.0, bdofs_coarse, V_coarse);
+    auto [a, L, bc, A, b] = create_variational_problem(V, f);
+    auto [a_coarse, L_coarse, bc_coarse, A_coarse, b_coarse] = create_variational_problem(V_coarse, f_coarse);
 
-    MatZeroEntries(A.mat());
-    fem::assemble_matrix(la::petsc::Matrix::set_block_fn(A.mat(), ADD_VALUES), *a, {bc});
-    MatAssemblyBegin(A.mat(), MAT_FLUSH_ASSEMBLY);
-    MatAssemblyEnd(A.mat(), MAT_FLUSH_ASSEMBLY);
-    fem::set_diagonal<T>(la::petsc::Matrix::set_fn(A.mat(), INSERT_VALUES), *V, {bc});
-    MatAssemblyBegin(A.mat(), MAT_FINAL_ASSEMBLY);
-    MatAssemblyEnd(A.mat(), MAT_FINAL_ASSEMBLY);
+    { 
+        // assemble A
+        MatZeroEntries(A.mat());
+        fem::assemble_matrix(la::petsc::Matrix::set_block_fn(A.mat(), ADD_VALUES), *a, {bc});
+        MatAssemblyBegin(A.mat(), MAT_FLUSH_ASSEMBLY);
+        MatAssemblyEnd(A.mat(), MAT_FLUSH_ASSEMBLY);
+        fem::set_diagonal<T>(la::petsc::Matrix::set_fn(A.mat(), INSERT_VALUES), *V, {bc});
+        MatAssemblyBegin(A.mat(), MAT_FINAL_ASSEMBLY);
+        MatAssemblyEnd(A.mat(), MAT_FINAL_ASSEMBLY);
 
-    b.set(0.0);
-    fem::assemble_vector(b.mutable_array(), *L);
-    fem::apply_lifting<T, U>(b.mutable_array(), {a}, {{bc}}, {}, T(1));
-    b.scatter_rev(std::plus<T>());
-    fem::set_bc<T, U>(b.mutable_array(), {bc});
+        // assemble b
+        b.set(0.0);
+        fem::assemble_vector(b.mutable_array(), *L);
+        fem::apply_lifting<T, U>(b.mutable_array(), {a}, {{bc}}, {}, T(1));
+        b.scatter_rev(std::plus<T>());
+        fem::set_bc<T, U>(b.mutable_array(), {bc});
+
+        // assemble A_coarse
+        MatZeroEntries(A_coarse.mat());
+        fem::assemble_matrix(la::petsc::Matrix::set_block_fn(A_coarse.mat(), ADD_VALUES), *a_coarse, {bc_coarse});
+        MatAssemblyBegin(A_coarse.mat(), MAT_FLUSH_ASSEMBLY);
+        MatAssemblyEnd(A_coarse.mat(), MAT_FLUSH_ASSEMBLY);
+        fem::set_diagonal<T>(la::petsc::Matrix::set_fn(A_coarse.mat(), INSERT_VALUES), *V_coarse, {bc_coarse});
+        MatAssemblyBegin(A_coarse.mat(), MAT_FINAL_ASSEMBLY);
+        MatAssemblyEnd(A_coarse.mat(), MAT_FINAL_ASSEMBLY);
+    }
 
     KSP ksp;
     KSPCreate(MPI_COMM_WORLD, &ksp);
@@ -126,16 +147,6 @@ int main(int argc, char** argv)
     // PCMGSetGalerkin(pc, PC_MG_GALERKIN_BOTH);
     PCMGSetGalerkin(pc, PC_MG_GALERKIN_NONE);
 
-    auto A_coarse = la::petsc::Matrix(fem::petsc::create_matrix(*a_coarse), false);
-    {
-        MatZeroEntries(A_coarse.mat());
-        fem::assemble_matrix(la::petsc::Matrix::set_block_fn(A_coarse.mat(), ADD_VALUES), *a_coarse, {bc_coarse});
-        MatAssemblyBegin(A_coarse.mat(), MAT_FLUSH_ASSEMBLY);
-        MatAssemblyEnd(A_coarse.mat(), MAT_FLUSH_ASSEMBLY);
-        fem::set_diagonal<T>(la::petsc::Matrix::set_fn(A_coarse.mat(), INSERT_VALUES), *V_coarse, {bc_coarse});
-        MatAssemblyBegin(A_coarse.mat(), MAT_FINAL_ASSEMBLY);
-        MatAssemblyEnd(A_coarse.mat(), MAT_FINAL_ASSEMBLY);
-    }
     PCMGSetOperators(pc, 0, A_coarse.mat(), A_coarse.mat());
 
     PCMGSetNumberSmooth(pc, 2);
