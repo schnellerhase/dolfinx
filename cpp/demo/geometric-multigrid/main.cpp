@@ -23,7 +23,9 @@
 #include <dolfinx/fem/FunctionSpace.h>
 #include <dolfinx/fem/petsc.h>
 #include <dolfinx/fem/utils.h>
+#include <dolfinx/io/ADIOS2Writers.h>
 #include <dolfinx/io/VTKFile.h>
+#include <dolfinx/io/XDMFFile.h>
 #include <dolfinx/la/petsc.h>
 #include <dolfinx/mesh/generation.h>
 #include <dolfinx/mesh/utils.h>
@@ -218,6 +220,15 @@ int main(int argc, char** argv)
   {
     io::VTKFile file(MPI_COMM_WORLD, "u.pvd", "w");
     file.write<T>({*u}, 0.0);
+
+    io::XDMFFile file_xdmf(mesh->comm(), "u_xdmf.xdmf", "w");
+    file_xdmf.write_mesh(*mesh);
+    file_xdmf.write_function(*u, 0.0);
+    file_xdmf.close();
+
+    io::VTXWriter<U> vtx_writer(mesh->comm(), std::filesystem::path("u_vtx.bp"),
+                                {u}, io::VTXMeshPolicy::reuse);
+    vtx_writer.write(0);
   }
 
   auto A_mat = A.mat();
