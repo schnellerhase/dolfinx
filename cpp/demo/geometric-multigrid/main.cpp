@@ -226,9 +226,11 @@ int main(int argc, char** argv)
     file_xdmf.write_function(*u, 0.0);
     file_xdmf.close();
 
+#ifdef HAS_ADIOS2
     io::VTXWriter<U> vtx_writer(mesh->comm(), std::filesystem::path("u_vtx.bp"),
                                 {u}, io::VTXMeshPolicy::reuse);
     vtx_writer.write(0);
+#endif
   }
 
   auto A_mat = A.mat();
