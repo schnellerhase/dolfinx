@@ -36,6 +36,9 @@ using namespace dolfinx;
 using T = PetscScalar;
 using U = typename dolfinx::scalar_value_type_t<T>;
 
+/**
+ RAII PETSc context management
+ */
 struct PetscEnv
 {
   PetscEnv(int argc, char** argv) { PetscInitialize(&argc, &argv, NULL, NULL); }
