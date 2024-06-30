@@ -1,4 +1,4 @@
-#ifndef DOXYGEN_SHOULD_SKIP_THIS
+/// @cond
 
 #include <cassert>
 #include <cmath>
@@ -247,4 +247,4 @@ int main(int argc, char** argv)
   // PetscLogView(PETSC_VIEWER_STDOUT_SELF);
 }
 
-#endif // DOXYGEN_SHOULD_SKIP_THIS
+/// @endcond
