@@ -1,3 +1,5 @@
+#ifndef DOXYGEN_SHOULD_SKIP_THIS
+
 #include <cassert>
 #include <cmath>
 #include <cstddef>
@@ -36,9 +38,6 @@ using namespace dolfinx;
 using T = PetscScalar;
 using U = typename dolfinx::scalar_value_type_t<T>;
 
-/**
- RAII PETSc context management
- */
 struct PetscEnv
 {
   PetscEnv(int argc, char** argv) { PetscInitialize(&argc, &argv, NULL, NULL); }
@@ -247,3 +246,5 @@ int main(int argc, char** argv)
 
   // PetscLogView(PETSC_VIEWER_STDOUT_SELF);
 }
+
+#endif // DOXYGEN_SHOULD_SKIP_THIS
