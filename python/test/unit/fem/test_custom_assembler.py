@@ -26,6 +26,7 @@ import pytest
 import dolfinx
 import dolfinx.pkgconfig
 import ufl
+from dolfinx.common import has_petsc4py
 from dolfinx.fem import Function, form, functionspace
 from dolfinx.mesh import create_unit_square
 from dolfinx.utils import cffi_utils as petsc_cffi
@@ -316,7 +317,7 @@ def test_custom_mesh_loop_rank1(dtype):
     assert np.linalg.norm(b3.x.array - b0.x.array) == pytest.approx(0.0, abs=1e-8)
 
 
-@pytest.mark.petsc4py
+@pytest.mark.skipif(not has_petsc4py, reason="Requires petsc4py support")
 @pytest.mark.parametrize(
     "set_vals,backend",
     [
