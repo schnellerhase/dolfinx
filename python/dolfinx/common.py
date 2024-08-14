@@ -8,7 +8,9 @@
 import functools
 import typing
 
-from dolfinx import cpp as _cpp
+from dolfinx.cpp import Reduction as _Reduction
+from dolfinx.cpp import Timer as _Timer
+from dolfinx.cpp import TimingTyp as _TimingType
 from dolfinx.cpp.common import (
     IndexMap,
     git_commit_hash,
@@ -18,6 +20,8 @@ from dolfinx.cpp.common import (
     has_parmetis,
     has_petsc,
 )
+from dolfinx.cpp.common import list_timings as _list_timings
+from dolfinx.cpp.common import timing as _timing
 
 __all__ = [
     "IndexMap",
@@ -31,12 +35,12 @@ __all__ = [
     "has_parmetis",
 ]
 
-TimingType = _cpp.common.TimingType
-Reduction = _cpp.common.Reduction
+TimingType = _TimingType
+Reduction = _Reduction
 
 
 def timing(task: str):
-    return _cpp.common.timing(task)
+    return _timing(task)
 
 
 def list_timings(comm, timing_types: list, reduction=Reduction.max):
@@ -44,7 +48,7 @@ def list_timings(comm, timing_types: list, reduction=Reduction.max):
     wall time, system time or user time. When used in parallel, a
     reduction is applied across all processes. By default, the maximum
     time is shown."""
-    _cpp.common.list_timings(comm, timing_types, reduction)
+    _list_timings(comm, timing_types, reduction)
 
 
 class Timer:
@@ -81,13 +85,10 @@ class Timer:
         list_timings(comm, [TimingType.wall, TimingType.user])
     """
 
-    _cpp_object: _cpp.common.Timer
+    _cpp_object: _Timer
 
     def __init__(self, name: typing.Optional[str] = None):
-        if name is None:
-            self._cpp_object = _cpp.common.Timer()
-        else:
-            self._cpp_object = _cpp.common.Timer(name)
+        self._cpp_object = _Timer(None if name is None else name)
 
     def __enter__(self):
         self._cpp_object.start()
