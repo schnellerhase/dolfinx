@@ -37,11 +37,11 @@ class NewtonSolver(_cpp.nls.petsc.NewtonSolver):
         self.setF(problem.F, self._b)
         self.set_form(problem.form)
 
-    def __del__(self):
+    def __del__(self) -> None:
         self._A.destroy()
         self._b.destroy()
 
-    def solve(self, u: fem.Function):
+    def solve(self, u: fem.Function) -> tuple[int, bool]:
         """Solve non-linear problem into function u. Returns the number
         of iterations and if the solver converged."""
         n, converged = super().solve(u.x.petsc_vec)

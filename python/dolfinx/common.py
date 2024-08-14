@@ -7,6 +7,9 @@
 
 import functools
 import typing
+from types import TracebackType
+
+from mpi4py import MPI as _MPI
 
 from dolfinx.cpp import Reduction as _Reduction
 from dolfinx.cpp import Timer as _Timer
@@ -39,11 +42,13 @@ TimingType = _TimingType
 Reduction = _Reduction
 
 
-def timing(task: str):
+def timing(task: str) -> tuple[int, float, float, float]:
     return _timing(task)
 
 
-def list_timings(comm, timing_types: list, reduction=Reduction.max):
+def list_timings(
+    comm: _MPI.Comm, timing_types: list, reduction: _Reduction = Reduction.max
+) -> None:
     """Print out a summary of all Timer measurements, with a choice of
     wall time, system time or user time. When used in parallel, a
     reduction is applied across all processes. By default, the maximum
@@ -87,35 +92,40 @@ class Timer:
 
     _cpp_object: _Timer
 
-    def __init__(self, name: typing.Optional[str] = None):
+    def __init__(self, name: typing.Optional[str] = None) -> None:
         self._cpp_object = _Timer(None if name is None else name)
 
-    def __enter__(self):
+    def __enter__(self) -> typing.Self:
         self._cpp_object.start()
         return self
 
-    def __exit__(self, *args):
+    def __exit__(
+        self,
+        exception_type: typing.Optional[BaseException],
+        exception_value: typing.Optional[BaseException],
+        traceback: typing.Optional[TracebackType],
+    ) -> None:
         self._cpp_object.stop()
 
-    def start(self):
+    def start(self) -> None:
         self._cpp_object.start()
 
-    def stop(self):
+    def stop(self) -> float:
         return self._cpp_object.stop()
 
-    def resume(self):
+    def resume(self) -> None:
         self._cpp_object.resume()
 
-    def elapsed(self):
+    def elapsed(self) -> float:
         return self._cpp_object.elapsed()
 
 
-def timed(task: str):
+def timed(task: str) -> typing.Callable[..., typing.Any]:
     """Decorator for timing functions."""
 
-    def decorator(func):
+    def decorator(func: typing.Callable[..., typing.Any]) -> typing.Callable[..., typing.Any]:
         @functools.wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: typing.Any, **kwargs: typing.Any) -> typing.Any:
             with Timer(task):
                 return func(*args, **kwargs)
 

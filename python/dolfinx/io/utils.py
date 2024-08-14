@@ -8,6 +8,7 @@
 
 import typing
 from pathlib import Path
+from types import TracebackType
 
 from mpi4py import MPI as _MPI
 
@@ -26,11 +27,13 @@ from dolfinx.mesh import GhostMode, Mesh, MeshTags
 __all__ = ["VTKFile", "XDMFFile", "cell_perm_gmsh", "cell_perm_vtk", "distribute_entity_data"]
 
 
-def _extract_cpp_objects(functions: typing.Union[Mesh, Function, tuple[Function], list[Function]]):
+def _extract_cpp_objects(
+    functions: typing.Union[Mesh, Function, tuple[Function], list[Function]],
+) -> list[typing.Any | Function]:
     """Extract C++ objects"""
     if isinstance(functions, (list, tuple)):
         return [getattr(u, "_cpp_object", u) for u in functions]
-    else:
+    else:  # TODO: remove case can not happen as indicated by typing
         return [getattr(functions, "_cpp_object", functions)]
 
 
@@ -103,16 +106,21 @@ if _cpp.common.has_adios2:
                     comm, filename, _extract_cpp_objects(output), engine, mesh_policy
                 )  # type: ignore[arg-type]
 
-        def __enter__(self):
+        def __enter__(self) -> typing.Self:
             return self
 
-        def __exit__(self, exception_type, exception_value, traceback):
+        def __exit__(
+            self,
+            exception_type: typing.Optional[BaseException],
+            exception_value: typing.Optional[BaseException],
+            traceback: typing.Optional[TracebackType],
+        ) -> None:
             self.close()
 
-        def write(self, t: float):
+        def write(self, t: float) -> None:
             self._cpp_object.write(t)
 
-        def close(self):
+        def close(self) -> None:
             self._cpp_object.close()
 
     class FidesWriter:
@@ -174,16 +182,21 @@ if _cpp.common.has_adios2:
                     comm, filename, _extract_cpp_objects(output), engine, mesh_policy
                 )  # type: ignore[arg-type]
 
-        def __enter__(self):
+        def __enter__(self) -> typing.Self:
             return self
 
-        def __exit__(self, exception_type, exception_value, traceback):
+        def __exit__(
+            self,
+            exception_type: typing.Optional[BaseException],
+            exception_value: typing.Optional[BaseException],
+            traceback: typing.Optional[TracebackType],
+        ) -> None:
             self.close()
 
-        def write(self, t: float):
+        def write(self, t: float) -> None:
             self._cpp_object.write(t)
 
-        def close(self):
+        def close(self) -> None:
             self._cpp_object.close()
 
 
@@ -196,10 +209,15 @@ class VTKFile(_cpp.io.VTKFile):
 
     """
 
-    def __enter__(self):
+    def __enter__(self) -> typing.Self:
         return self
 
-    def __exit__(self, exception_type, exception_value, traceback):
+    def __exit__(
+        self,
+        exception_type: typing.Optional[BaseException],
+        exception_value: typing.Optional[BaseException],
+        traceback: typing.Optional[TracebackType],
+    ) -> None:
         self.close()
 
     def write_mesh(self, mesh: Mesh, t: float = 0.0) -> None:
@@ -212,10 +230,15 @@ class VTKFile(_cpp.io.VTKFile):
 
 
 class XDMFFile(_cpp.io.XDMFFile):
-    def __enter__(self):
+    def __enter__(self) -> typing.Self:
         return self
 
-    def __exit__(self, exception_type, exception_value, traceback):
+    def __exit__(
+        self,
+        exception_type: typing.Optional[BaseException],
+        exception_value: typing.Optional[BaseException],
+        traceback: typing.Optional[TracebackType],
+    ) -> None:
         self.close()
 
     def write_mesh(self, mesh: Mesh, xpath: str = "/Xdmf/Domain") -> None:
@@ -233,8 +256,11 @@ class XDMFFile(_cpp.io.XDMFFile):
         super().write_meshtags(tags._cpp_object, x, geometry_xpath, xpath)
 
     def write_function(
-        self, u: Function, t: float = 0.0, mesh_xpath="/Xdmf/Domain/Grid[@GridType='Uniform'][1]"
-    ):
+        self,
+        u: Function,
+        t: float = 0.0,
+        mesh_xpath: str = "/Xdmf/Domain/Grid[@GridType='Uniform'][1]",
+    ) -> None:
         """Write function to file for a given time.
 
         Note:
@@ -252,7 +278,10 @@ class XDMFFile(_cpp.io.XDMFFile):
         super().write_function(getattr(u, "_cpp_object", u), t, mesh_xpath)
 
     def read_mesh(
-        self, ghost_mode=GhostMode.shared_facet, name="mesh", xpath="/Xdmf/Domain"
+        self,
+        ghost_mode: GhostMode = GhostMode.shared_facet,
+        name: str = "mesh",
+        xpath: str = "/Xdmf/Domain",
     ) -> Mesh:
         """Read mesh data from file."""
         cell_shape, cell_degree = super().read_cell_type(name, xpath)
@@ -276,7 +305,7 @@ class XDMFFile(_cpp.io.XDMFFile):
         )
         return Mesh(msh, domain)
 
-    def read_meshtags(self, mesh, name, xpath="/Xdmf/Domain"):
+    def read_meshtags(self, mesh: Mesh, name: str, xpath: str = "/Xdmf/Domain") -> MeshTags:
         mt = super().read_meshtags(mesh._cpp_object, name, xpath)
         return MeshTags(mt)
 

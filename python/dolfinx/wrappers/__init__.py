@@ -4,9 +4,9 @@
 #
 # SPDX-License-Identifier:    LGPL-3.0-or-later
 
+from pathlib import Path
 
-def get_include_path():
+
+def get_include_path() -> Path:
     """Return path to nanobind wrapper header files"""
-    import pathlib
-
-    return pathlib.Path(__file__).parent
+    return Path(__file__).parent

@@ -51,9 +51,9 @@ class CoordinateElement:
 def coordinate_element(
     celltype: _cpp.mesh.CellType,
     degree: int,
-    variant=int(basix.LagrangeVariant.unset),
+    variant: int = int(basix.LagrangeVariant.unset),
     dtype: npt.DTypeLike = np.float64,
-):
+) -> CoordinateElement:
     """Create a Lagrange CoordinateElement from element metadata.
 
     Coordinate elements are typically used to create meshes.
@@ -76,7 +76,7 @@ def coordinate_element(
 
 
 @coordinate_element.register(basix.finite_element.FiniteElement)
-def _(e: basix.finite_element.FiniteElement):
+def _(e: basix.finite_element.FiniteElement) -> CoordinateElement:
     """Create a Lagrange CoordinateElement from a Basix finite element.
 
     Coordinate elements are typically used when creating meshes.

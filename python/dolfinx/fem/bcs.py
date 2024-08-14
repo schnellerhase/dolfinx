@@ -98,7 +98,15 @@ class DirichletBC:
         _cpp.fem.DirichletBC_float64,
     ]
 
-    def __init__(self, bc):
+    def __init__(
+        self,
+        bc: typing.Union[
+            _cpp.fem.DirichletBC_complex64,
+            _cpp.fem.DirichletBC_complex128,
+            _cpp.fem.DirichletBC_float32,
+            _cpp.fem.DirichletBC_float64,
+        ],
+    ):
         """Representation of Dirichlet boundary condition which is imposed on
         a linear system.
 
@@ -195,8 +203,8 @@ def dirichletbc(
 
 
 def bcs_by_block(
-    spaces: typing.Iterable[typing.Union[dolfinx.fem.FunctionSpace, None]],
-    bcs: typing.Iterable[DirichletBC],
+    spaces: list[typing.Union[dolfinx.fem.FunctionSpace, None]],
+    bcs: list[DirichletBC],
 ) -> list[list[DirichletBC]]:
     """Arrange Dirichlet boundary conditions by the function space that
     they constrain.
@@ -207,8 +215,10 @@ def bcs_by_block(
     ``space[i]``.
     """
 
-    def _bc_space(V, bcs):
+    def _bc_space(
+        V: list[typing.Union[dolfinx.fem.FunctionSpace, None]], bcs: list[DirichletBC]
+    ) -> list[DirichletBC]:
         """Return list of bcs that have the same space as V"""
-        return [bc for bc in bcs if V.contains(bc.function_space)]
+        return [bc for bc in bcs if bc.function_space in V]
 
     return [_bc_space(V, bcs) if V is not None else [] for V in spaces]
