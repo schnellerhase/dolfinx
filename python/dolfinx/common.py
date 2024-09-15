@@ -7,8 +7,13 @@
 
 import functools
 import typing
+from types import TracebackType
 
-from dolfinx import cpp as _cpp
+from mpi4py import MPI as _MPI
+
+from dolfinx.cpp import Reduction as _Reduction
+from dolfinx.cpp import Timer as _Timer
+from dolfinx.cpp import TimingTyp as _TimingType
 from dolfinx.cpp.common import (
     IndexMap,
     git_commit_hash,
@@ -23,6 +28,8 @@ from dolfinx.cpp.common import (
     has_slepc,
     ufcx_signature,
 )
+from dolfinx.cpp.common import list_timings as _list_timings
+from dolfinx.cpp.common import timing as _timing
 
 __all__ = [
     "IndexMap",
@@ -41,20 +48,22 @@ __all__ = [
     "ufcx_signature",
 ]
 
-TimingType = _cpp.common.TimingType
-Reduction = _cpp.common.Reduction
+TimingType = _TimingType
+Reduction = _Reduction
 
 
-def timing(task: str):
-    return _cpp.common.timing(task)
+def timing(task: str) -> tuple[int, float, float, float]:
+    return _timing(task)
 
 
-def list_timings(comm, timing_types: list, reduction=Reduction.max):
+def list_timings(
+    comm: _MPI.Comm, timing_types: list, reduction: _Reduction = Reduction.max
+) -> None:
     """Print out a summary of all Timer measurements, with a choice of
     wall time, system time or user time. When used in parallel, a
     reduction is applied across all processes. By default, the maximum
     time is shown."""
-    _cpp.common.list_timings(comm, timing_types, reduction)
+    _list_timings(comm, timing_types, reduction)
 
 
 class Timer:
@@ -91,37 +100,42 @@ class Timer:
         list_timings(comm, [TimingType.wall, TimingType.user])
     """
 
-    _cpp_object: _cpp.common.Timer
+    _cpp_object: _Timer
 
-    def __init__(self, name: typing.Optional[str] = None):
+    def __init__(self, name: typing.Optional[str] = None) -> None:
         self._cpp_object = _cpp.common.Timer(name)
 
-    def __enter__(self):
+    def __enter__(self) -> typing.Self:
         self._cpp_object.start()
         return self
 
-    def __exit__(self, *args):
+    def __exit__(
+        self,
+        exception_type: typing.Optional[BaseException],
+        exception_value: typing.Optional[BaseException],
+        traceback: typing.Optional[TracebackType],
+    ) -> None:
         self._cpp_object.stop()
 
-    def start(self):
+    def start(self) -> None:
         self._cpp_object.start()
 
-    def stop(self):
+    def stop(self) -> float:
         return self._cpp_object.stop()
 
-    def resume(self):
+    def resume(self) -> None:
         self._cpp_object.resume()
 
-    def elapsed(self):
+    def elapsed(self) -> float:
         return self._cpp_object.elapsed()
 
 
-def timed(task: str):
+def timed(task: str) -> typing.Callable[..., typing.Any]:
     """Decorator for timing functions."""
 
-    def decorator(func):
+    def decorator(func: typing.Callable[..., typing.Any]) -> typing.Callable[..., typing.Any]:
         @functools.wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: typing.Any, **kwargs: typing.Any) -> typing.Any:
             with Timer(task):
                 return func(*args, **kwargs)
 

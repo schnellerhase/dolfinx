@@ -19,10 +19,18 @@ import basix.ufl
 import ufl
 from dolfinx import cpp as _cpp
 from dolfinx import default_real_type
+from dolfinx.cpp.graph import AdjacencyList_int32, AdjacencyList_int64
 from dolfinx.cpp.mesh import (
     CellType,
     DiagonalType,
+    Geometry_float32,
+    Geometry_float64,
     GhostMode,
+    MeshTags_float64,
+    MeshTags_int8,
+    MeshTags_int32,
+    MeshTags_int64,
+    Topology,
     build_dual_graph,
     cell_dim,
     create_cell_partitioner,
@@ -66,6 +74,11 @@ __all__ = [
     "entities_to_geometry",
 ]
 
+CellPartionerType = typing.Callable[
+    [_MPI.Comm, int, list[CellType], list[npt.NDArray[np.int64]]],
+    AdjacencyList_int32 | AdjacencyList_int64,
+]
+
 
 class Mesh:
     """A mesh."""
@@ -73,7 +86,11 @@ class Mesh:
     _mesh: typing.Union[_cpp.mesh.Mesh_float32, _cpp.mesh.Mesh_float64]
     _ufl_domain: typing.Optional[ufl.Mesh]
 
-    def __init__(self, mesh, domain: typing.Optional[ufl.Mesh]):
+    def __init__(
+        self,
+        mesh: typing.Union[_cpp.mesh.Mesh_float32, _cpp.mesh.Mesh_float64],
+        domain: typing.Optional[ufl.Mesh],
+    ):
         """Initialize mesh from a C++ mesh.
 
         Args:
@@ -90,15 +107,15 @@ class Mesh:
             self._ufl_domain._ufl_cargo = self._cpp_object  # type: ignore
 
     @property
-    def comm(self):
+    def comm(self) -> _MPI.Comm:
         return self._cpp_object.comm
 
     @property
-    def name(self):
+    def name(self) -> str:
         return self._cpp_object.name
 
     @name.setter
-    def name(self, value):
+    def name(self, value: str) -> None:
         self._cpp_object.name = value
 
     def ufl_cell(self) -> ufl.Cell:
@@ -138,12 +155,12 @@ class Mesh:
         return _cpp.mesh.h(self._cpp_object, dim, entities)
 
     @property
-    def topology(self):
+    def topology(self) -> Topology:
         "Mesh topology."
         return self._cpp_object.topology
 
     @property
-    def geometry(self):
+    def geometry(self) -> typing.Union[Geometry_float32, Geometry_float64]:
         "Mesh geometry."
         return self._cpp_object.geometry
 
@@ -151,7 +168,10 @@ class Mesh:
 class MeshTags:
     """Mesh tags associate data (markers) with a subset of mesh entities of a given dimension."""
 
-    def __init__(self, meshtags):
+    def __init__(
+        self,
+        meshtags: typing.Union[MeshTags_int8, MeshTags_int32, MeshTags_int64, MeshTags_float64],
+    ):
         """Initialize tags from a C++ MeshTags object.
 
         Args:
@@ -189,7 +209,7 @@ class MeshTags:
         return self._cpp_object.indices
 
     @property
-    def values(self):
+    def values(self) -> npt.NDArray[np.int32]:
         """Values associated with tagged mesh entities."""
         return self._cpp_object.values
 
@@ -199,10 +219,10 @@ class MeshTags:
         return self._cpp_object.name
 
     @name.setter
-    def name(self, value):
+    def name(self, value: np.int32) -> None:
         self._cpp_object.name = value
 
-    def find(self, value) -> npt.NDArray[np.int32]:
+    def find(self, value: np.int32) -> npt.NDArray[np.int32]:
         """Get a list of all entity indices with a given value.
 
         Args:
@@ -214,11 +234,15 @@ class MeshTags:
         return self._cpp_object.find(value)
 
 
-def compute_incident_entities(topology, entities: npt.NDArray[np.int32], d0: int, d1: int):
+def compute_incident_entities(
+    topology: Topology, entities: npt.NDArray[np.int32], d0: int, d1: int
+) -> npt.NDArray[np.int32]:
     return _cpp.mesh.compute_incident_entities(topology, entities, d0, d1)
 
 
-def compute_midpoints(mesh: Mesh, dim: int, entities: npt.NDArray[np.int32]):
+def compute_midpoints(
+    mesh: Mesh, dim: int, entities: npt.NDArray[np.int32]
+) -> npt.NDArray[np.floating]:
     return _cpp.mesh.compute_midpoints(mesh._cpp_object, dim, entities)
 
 
@@ -551,7 +575,7 @@ def meshtags(
 
 def meshtags_from_entities(
     mesh: Mesh, dim: int, entities: _cpp.graph.AdjacencyList_int32, values: npt.NDArray[typing.Any]
-):
+) -> MeshTags:
     """Create a :class:dolfinx.mesh.MeshTags` object that associates
     data with a subset of mesh entities, where the entities are defined
     by their vertices.
@@ -585,8 +609,8 @@ def create_interval(
     nx: int,
     points: npt.ArrayLike,
     dtype: npt.DTypeLike = default_real_type,
-    ghost_mode=GhostMode.shared_facet,
-    partitioner=None,
+    ghost_mode: GhostMode = GhostMode.shared_facet,
+    partitioner: typing.Optional[CellPartionerType] = None,
 ) -> Mesh:
     """Create an interval mesh.
 
@@ -621,8 +645,8 @@ def create_unit_interval(
     comm: _MPI.Comm,
     nx: int,
     dtype: npt.DTypeLike = default_real_type,
-    ghost_mode=GhostMode.shared_facet,
-    partitioner=None,
+    ghost_mode: GhostMode = GhostMode.shared_facet,
+    partitioner: typing.Optional[CellPartionerType] = None,
 ) -> Mesh:
     """Create a mesh on the unit interval.
 
@@ -647,10 +671,10 @@ def create_rectangle(
     comm: _MPI.Comm,
     points: npt.ArrayLike,
     n: npt.ArrayLike,
-    cell_type=CellType.triangle,
+    cell_type: CellType = CellType.triangle,
     dtype: npt.DTypeLike = default_real_type,
-    ghost_mode=GhostMode.shared_facet,
-    partitioner=None,
+    ghost_mode: GhostMode = GhostMode.shared_facet,
+    partitioner: typing.Optional[CellPartionerType] = None,
     diagonal: DiagonalType = DiagonalType.right,
 ) -> Mesh:
     """Create a rectangle mesh.
@@ -689,10 +713,10 @@ def create_unit_square(
     comm: _MPI.Comm,
     nx: int,
     ny: int,
-    cell_type=CellType.triangle,
+    cell_type: CellType = CellType.triangle,
     dtype: npt.DTypeLike = default_real_type,
-    ghost_mode=GhostMode.shared_facet,
-    partitioner=None,
+    ghost_mode: GhostMode = GhostMode.shared_facet,
+    partitioner: typing.Optional[CellPartionerType] = None,
     diagonal: DiagonalType = DiagonalType.right,
 ) -> Mesh:
     """Create a mesh of a unit square.
@@ -729,10 +753,10 @@ def create_box(
     comm: _MPI.Comm,
     points: list[npt.ArrayLike],
     n: list,
-    cell_type=CellType.tetrahedron,
+    cell_type: CellType = CellType.tetrahedron,
     dtype: npt.DTypeLike = default_real_type,
-    ghost_mode=GhostMode.shared_facet,
-    partitioner=None,
+    ghost_mode: GhostMode = GhostMode.shared_facet,
+    partitioner: typing.Optional[CellPartionerType] = None,
 ) -> Mesh:
     """Create a box mesh.
 
@@ -768,10 +792,10 @@ def create_unit_cube(
     nx: int,
     ny: int,
     nz: int,
-    cell_type=CellType.tetrahedron,
+    cell_type: CellType = CellType.tetrahedron,
     dtype: npt.DTypeLike = default_real_type,
-    ghost_mode=GhostMode.shared_facet,
-    partitioner=None,
+    ghost_mode: GhostMode = GhostMode.shared_facet,
+    partitioner: typing.Optional[CellPartionerType] = None,
 ) -> Mesh:
     """Create a mesh of a unit cube.
 
@@ -803,7 +827,7 @@ def create_unit_cube(
 
 
 def entities_to_geometry(
-    mesh: Mesh, dim: int, entities: npt.NDArray[np.int32], permute=False
+    mesh: Mesh, dim: int, entities: npt.NDArray[np.int32], permute: bool = False
 ) -> npt.NDArray[np.int32]:
     """Compute the geometric DOFs associated with the closure of the given mesh entities.
 

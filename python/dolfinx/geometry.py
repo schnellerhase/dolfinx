@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import typing
 
+from mpi4py import MPI as _MPI
+
 import numpy as np
 import numpy.typing as npt
 
 if typing.TYPE_CHECKING:
-    from dolfinx.cpp.graph import AdjacencyList_int32
+    from dolfinx.cpp.graph import AdjacencyList_int32, AdjacencyList_int64
     from dolfinx.mesh import Mesh
 
 
@@ -40,7 +42,12 @@ class PointOwnershipData:
         _cpp.geometry.PointOwnershipData_float32, _cpp.geometry.PointOwnershipData_float64
     ]
 
-    def __init__(self, ownership_data):
+    def __init__(
+        self,
+        ownership_data: typing.Union[
+            _cpp.geometry.PointOwnershipData_float32, _cpp.geometry.PointOwnershipData_float64
+        ],
+    ) -> None:
         """Wrap a C++ PointOwnershipData."""
         self._cpp_object = ownership_data
 
@@ -68,7 +75,12 @@ class BoundingBoxTree:
         _cpp.geometry.BoundingBoxTree_float32, _cpp.geometry.BoundingBoxTree_float64
     ]
 
-    def __init__(self, tree):
+    def __init__(
+        self,
+        tree: typing.Union[
+            _cpp.geometry.BoundingBoxTree_float32, _cpp.geometry.BoundingBoxTree_float64
+        ],
+    ) -> None:
         """Wrap a C++ BoundingBoxTree.
 
         Note:
@@ -83,7 +95,7 @@ class BoundingBoxTree:
         """Number of bounding boxes."""
         return self._cpp_object.num_bboxes
 
-    def get_bbox(self, i) -> npt.NDArray[np.floating]:
+    def get_bbox(self, i: int) -> npt.NDArray[np.floating]:
         """Get lower and upper corners of the ith bounding box.
 
         Args:
@@ -96,7 +108,7 @@ class BoundingBoxTree:
         """
         return self._cpp_object.get_bbox(i)
 
-    def create_global_tree(self, comm) -> BoundingBoxTree:
+    def create_global_tree(self, comm: _MPI.Comm) -> BoundingBoxTree:
         return BoundingBoxTree(self._cpp_object.create_global_tree(comm))
 
 
@@ -217,7 +229,7 @@ def create_midpoint_tree(mesh: Mesh, dim: int, entities: npt.NDArray[np.int32]) 
 
 def compute_colliding_cells(
     mesh: Mesh, candidates: AdjacencyList_int32, x: npt.NDArray[np.floating]
-):
+) -> typing.Union[AdjacencyList_int32, AdjacencyList_int64]:
     """From a mesh, find which cells collide with a set of points.
 
     Args:
@@ -234,7 +246,9 @@ def compute_colliding_cells(
     return _cpp.geometry.compute_colliding_cells(mesh._cpp_object, candidates, x)
 
 
-def squared_distance(mesh: Mesh, dim: int, entities: list[int], points: npt.NDArray[np.floating]):
+def squared_distance(
+    mesh: Mesh, dim: int, entities: list[int], points: npt.NDArray[np.floating]
+) -> npt.NDArray[np.floating]:
     """Compute the squared distance between a point and a mesh entity.
 
     The distance is computed between the ith input points and the ith

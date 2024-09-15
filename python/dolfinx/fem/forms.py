@@ -254,25 +254,22 @@ def form(
         constants = [c._cpp_object for c in form.constants()]
 
         # Make map from integral_type to subdomain id
-        subdomain_ids = {type: [] for type in sd.get(domain).keys()}
+        subdomain_ids: dict[str, list[int]] = {type: [] for type in sd.get(domain).keys()}
         for integral in form.integrals():
             if integral.subdomain_data() is not None:
                 # Subdomain ids can be strings, its or tuples with strings and ints
                 if integral.subdomain_id() != "everywhere":
                     try:
-                        ids = [sid for sid in integral.subdomain_id() if sid != "everywhere"]
+                        subdomain_ids[integral.integral_type()] += [
+                            sid for sid in integral.subdomain_id() if sid != "everywhere"
+                        ]
                     except TypeError:
                         # If not tuple, but single integer id
-                        ids = [integral.subdomain_id()]
-                else:
-                    ids = []
-                subdomain_ids[integral.integral_type()].append(ids)
+                        subdomain_ids[integral.integral_type()].append(integral.subdomain_id())
 
-        # Chain and sort subdomain ids
-        for itg_type, marker_ids in subdomain_ids.items():
-            flattened_ids = list(chain.from_iterable(marker_ids))
-            flattened_ids.sort()
-            subdomain_ids[itg_type] = flattened_ids
+        # Sort subdomain ids
+        for val in subdomain_ids.values():
+            val.sort()
 
         # Subdomain markers (possibly empty list for some integral types)
         subdomains = {

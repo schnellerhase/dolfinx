@@ -5,7 +5,7 @@
 # SPDX-License-Identifier:    LGPL-3.0-or-later
 """Linear algebra functionality"""
 
-import typing
+from typing import Any, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -28,7 +28,7 @@ __all__ = [
 
 
 class MatrixCSR:
-    _cpp_object: typing.Union[
+    _cpp_object: Union[
         _cpp.la.MatrixCSR_float32,
         _cpp.la.MatrixCSR_float64,
         _cpp.la.MatrixCSR_complex64,
@@ -37,7 +37,7 @@ class MatrixCSR:
 
     def __init__(
         self,
-        A: typing.Union[
+        A: Union[
             _cpp.la.MatrixCSR_float32,
             _cpp.la.MatrixCSR_float64,
             _cpp.la.MatrixCSR_complex64,
@@ -64,7 +64,7 @@ class MatrixCSR:
         return self._cpp_object.index_map(i)
 
     @property
-    def block_size(self):
+    def block_size(self) -> tuple[int, int]:
         """Block sizes for the matrix."""
         return self._cpp_object.bs
 
@@ -132,7 +132,7 @@ class MatrixCSR:
         """
         return self._cpp_object.to_dense()
 
-    def to_scipy(self, ghosted=False):
+    def to_scipy(self, ghosted: bool = False) -> Any:
         """Convert to a SciPy CSR/BSR matrix. Data is shared.
 
         Note:
@@ -174,7 +174,9 @@ class MatrixCSR:
 
 
 def matrix_csr(
-    sp: _cpp.la.SparsityPattern, block_mode=BlockMode.compact, dtype: npt.DTypeLike = np.float64
+    sp: _cpp.la.SparsityPattern,
+    block_mode: BlockMode = BlockMode.compact,
+    dtype: npt.DTypeLike = np.float64,
 ) -> MatrixCSR:
     """Create a distributed sparse matrix.
 
@@ -203,7 +205,7 @@ def matrix_csr(
 
 
 class Vector:
-    _cpp_object: typing.Union[
+    _cpp_object: Union[
         _cpp.la.Vector_float32,
         _cpp.la.Vector_float64,
         _cpp.la.Vector_complex64,
@@ -215,7 +217,7 @@ class Vector:
 
     def __init__(
         self,
-        x: typing.Union[
+        x: Union[
             _cpp.la.Vector_float32,
             _cpp.la.Vector_float64,
             _cpp.la.Vector_complex64,
@@ -237,7 +239,7 @@ class Vector:
         self._cpp_object = x
         self._petsc_x = None
 
-    def __del__(self):
+    def __del__(self) -> None:
         if self._petsc_x is not None:
             self._petsc_x.destroy()
 
@@ -257,7 +259,7 @@ class Vector:
         return self._cpp_object.array
 
     @property
-    def petsc_vec(self):
+    def petsc_vec(self) -> Any:
         """PETSc vector holding the entries of the vector.
 
         Upon first call, this function creates a PETSc ``Vec`` object
@@ -286,7 +288,7 @@ class Vector:
         self._cpp_object.scatter_reverse(mode)
 
 
-def vector(map, bs=1, dtype: npt.DTypeLike = np.float64) -> Vector:
+def vector(map: IndexMap, bs: int = 1, dtype: npt.DTypeLike = np.float64) -> Vector:
     """Create a distributed vector.
 
     Args:
@@ -318,7 +320,7 @@ def vector(map, bs=1, dtype: npt.DTypeLike = np.float64) -> Vector:
     return Vector(vtype(map, bs))
 
 
-def create_petsc_vector_wrap(x: Vector):
+def create_petsc_vector_wrap(x: Vector) -> Any:
     """Wrap a distributed DOLFINx vector as a PETSc vector.
 
     Note:
@@ -343,7 +345,7 @@ def create_petsc_vector_wrap(x: Vector):
     return PETSc.Vec().createGhostWithArray(ghosts, x.array, size=size, bsize=bs, comm=map.comm)  # type: ignore
 
 
-def create_petsc_vector(map, bs: int):
+def create_petsc_vector(map: IndexMap, bs: int) -> Any:
     """Create a distributed PETSc vector.
 
     Note:
@@ -367,7 +369,7 @@ def create_petsc_vector(map, bs: int):
     return PETSc.Vec().createGhost(ghosts, size=size, bsize=bs, comm=map.comm)  # type: ignore
 
 
-def orthonormalize(basis: list[Vector]):
+def orthonormalize(basis: list[Vector]) -> None:
     """Orthogonalise set of PETSc vectors in-place."""
     _cpp.la.orthonormalize([x._cpp_object for x in basis])
 

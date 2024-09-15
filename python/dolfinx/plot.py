@@ -6,9 +6,10 @@
 """Support functions for plotting"""
 
 import functools
-import typing
+from typing import Optional
 
 import numpy as np
+import numpy.typing as npt
 
 from dolfinx import cpp as _cpp
 from dolfinx import fem, mesh
@@ -31,7 +32,9 @@ _first_order_vtk = {
 
 
 @functools.singledispatch
-def vtk_mesh(msh: mesh.Mesh, dim: typing.Optional[int] = None, entities=None):
+def vtk_mesh(
+    msh: mesh.Mesh, dim: Optional[int] = None, entities: Optional[npt.NDArray[np.int32]] = None
+) -> tuple[mesh.Topology, npt.NDArray[np.int8], npt.NDArray[np.floating]]:
     """Create vtk mesh topology data for mesh entities of a given
     dimension. The vertex indices in the returned topology array are the
     indices for the associated entry in the mesh geometry.
@@ -75,7 +78,9 @@ def vtk_mesh(msh: mesh.Mesh, dim: typing.Optional[int] = None, entities=None):
 
 
 @vtk_mesh.register(fem.FunctionSpace)
-def _(V: fem.FunctionSpace, entities=None):
+def _(
+    V: fem.FunctionSpace, entities: Optional[npt.NDArray[np.int8] | range] = None
+) -> tuple[mesh.Topology, npt.NDArray[np.int8], npt.NDArray[np.floating]]:
     """Creates a VTK mesh topology (topology array and array of cell
     types) that is based on the degree-of-freedom coordinates.
 

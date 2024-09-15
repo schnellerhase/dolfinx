@@ -10,9 +10,9 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Any, Callable, Optional
 
-from mpi4py import MPI
+from mpi4py import MPI as _MPI
 
 import ffcx
 import ffcx.codegeneration.jit
@@ -44,7 +44,9 @@ else:
     )
 
 
-def mpi_jit_decorator(local_jit, *args, **kwargs):
+def mpi_jit_decorator(
+    local_jit: Callable[..., Any], *args: Any, **kwargs: Any
+) -> Callable[..., Any]:
     """A decorator for jit compilation.
 
     Use this function as a decorator to any jit compiler function. In a
@@ -56,7 +58,7 @@ def mpi_jit_decorator(local_jit, *args, **kwargs):
     """
 
     @functools.wraps(local_jit)
-    def mpi_jit(comm, *args, **kwargs):
+    def mpi_jit(comm: _MPI.Comm, *args: Any, **kwargs: Any) -> Callable[..., Any]:
         # Just call JIT compiler when running in serial
         if comm.size == 1:
             return local_jit(*args, **kwargs)
@@ -83,7 +85,7 @@ def mpi_jit_decorator(local_jit, *args, **kwargs):
         # Wait for the compiling process to finish and get status
         # TODO: Would be better to broadcast the status from root but
         # this works.
-        global_status = comm.allreduce(status, op=MPI.MAX)
+        global_status = comm.allreduce(status, op=_MPI.MAX)
         if global_status == 0:
             # Success, call jit on all other processes (this should just
             # read the cache)
@@ -103,7 +105,7 @@ def mpi_jit_decorator(local_jit, *args, **kwargs):
 
 
 @functools.cache
-def _load_options():
+def _load_options() -> tuple[dict, dict]:
     """Loads options from JSON files."""
     user_config_file = os.getenv("XDG_CONFIG_HOME", default=Path.home().joinpath(".config")) / Path(
         "dolfinx", "dolfinx_jit_options.json"
@@ -157,8 +159,10 @@ def get_options(priority_options: Optional[dict] = None) -> dict:
 
 @mpi_jit_decorator
 def ffcx_jit(
-    ufl_object, form_compiler_options: Optional[dict] = None, jit_options: Optional[dict] = None
-):
+    ufl_object: ufl.Form,
+    form_compiler_options: Optional[dict] = None,
+    jit_options: Optional[dict] = None,
+) -> tuple[Any, Any, tuple[str, str]]:
     """Compile UFL object with FFCx and CFFI.
 
     Args:

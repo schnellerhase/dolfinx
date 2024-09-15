@@ -14,7 +14,7 @@ import os
 import subprocess
 
 
-def _pkgconfig_query(s):
+def _pkgconfig_query(s: str) -> tuple[int, str]:
     pkg_config_exe = os.environ.get("PKG_CONFIG", None) or "pkg-config"
     cmd = [pkg_config_exe, *s.split()]
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -23,12 +23,12 @@ def _pkgconfig_query(s):
     return (rc, out.rstrip().decode("utf-8"))
 
 
-def exists(package) -> bool:
+def exists(package: str) -> bool:
     """Test for the existence of a pkg-config file for a named package."""
     return _pkgconfig_query("--exists " + package)[0] == 0
 
 
-def parse(package):
+def parse(package: str) -> dict[str, list[str]]:
     """Return a dict containing compile-time definitions."""
     parse_map = {
         "-D": "define_macros",
@@ -37,7 +37,7 @@ def parse(package):
         "-l": "libraries",
     }
 
-    result = {x: [] for x in parse_map.values()}
+    result: dict[str, list[str]] = {x: [] for x in parse_map.values()}
 
     # Execute the query to pkg-config and clean the result
     out = _pkgconfig_query(package + " --cflags --libs")[1]
