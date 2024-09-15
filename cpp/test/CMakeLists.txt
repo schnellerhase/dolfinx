@@ -40,7 +40,9 @@ add_executable(
   common/sub_systems_manager.cpp
   common/index_map.cpp
   common/sort.cpp
+  fem/functionspace.cpp
   mesh/distributed_mesh.cpp
+  mesh/generation.cpp
   common/CIFailure.cpp
   refinement/interval.cpp
   ${CMAKE_CURRENT_BINARY_DIR}/poisson.c

@@ -18,10 +18,15 @@ from dolfinx.cpp.common import (
     IndexMap,
     git_commit_hash,
     has_adios2,
+    has_complex_ufcx_kernels,
     has_debug,
     has_kahip,
     has_parmetis,
     has_petsc,
+    has_petsc4py,
+    has_ptscotch,
+    has_slepc,
+    ufcx_signature,
 )
 from dolfinx.cpp.common import list_timings as _list_timings
 from dolfinx.cpp.common import timing as _timing
@@ -32,10 +37,15 @@ __all__ = [
     "timed",
     "git_commit_hash",
     "has_adios2",
+    "has_complex_ufcx_kernels",
     "has_debug",
     "has_kahip",
-    "has_petsc",
     "has_parmetis",
+    "has_petsc",
+    "has_petsc4py",
+    "has_ptscotch",
+    "has_slepc",
+    "ufcx_signature",
 ]
 
 TimingType = _TimingType
@@ -93,7 +103,7 @@ class Timer:
     _cpp_object: _Timer
 
     def __init__(self, name: typing.Optional[str] = None) -> None:
-        self._cpp_object = _Timer(None if name is None else name)
+        self._cpp_object = _cpp.common.Timer(name)
 
     def __enter__(self) -> typing.Self:
         self._cpp_object.start()
