@@ -196,7 +196,7 @@ class FiniteElement:
         Raises:
             Runtime error if Basix element does not exist.
         """
-        return self._cpp_object.basix_element
+        return basix.finite_element.FiniteElement(self._cpp_object.basix_element)
 
     @property
     def num_sub_elements(self) -> int:
